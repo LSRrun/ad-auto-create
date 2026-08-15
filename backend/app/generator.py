@@ -13,16 +13,10 @@ def generate_ad_copy(
     points = [point.strip() for point in selling_points.replace("，", ",").split(",") if point.strip()]
     points = points[:3] or ["精工品质", "舒适体验", "轻松打理"]
 
-    headline_prefix = {
-        "quiet-luxury": "让日常，更有质感",
-        "natural-spa": "在家，收藏一段自然",
-        "midnight-tech": "重新定义智能浴室",
-    }.get(style_id, "焕新你的浴室体验")
-
     return {
         "brand": brand.strip() or "MUJING",
         "eyebrow": style["eyebrow"],
-        "headline": headline_prefix,
+        "headline": style["headline"],
         "productName": product_name.strip(),
         "description": f"{product_name.strip()}，用更克制的设计和更贴心的细节，让每一次使用都成为享受。",
         "price": price.strip() or "到店咨询",
@@ -30,4 +24,3 @@ def generate_ad_copy(
         "cta": "立即了解",
         "style": style,
     }
-

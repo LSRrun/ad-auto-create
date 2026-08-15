@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { generateAd, getStyles } from './api'
 
 const fallbackStyles = [
-  { id: 'quiet-luxury', name: '静奢白', description: '精致留白，适合高端单品', palette: { background: '#f3f0ea', surface: '#fff', text: '#20211f', accent: '#826b4d' } },
-  { id: 'natural-spa', name: '自然疗愈', description: '自然色彩，营造松弛氛围', palette: { background: '#dfe7df', surface: '#f6f4ed', text: '#24352c', accent: '#607966' } },
-  { id: 'midnight-tech', name: '暗夜科技', description: '黑金质感，突出智能科技', palette: { background: '#141718', surface: '#222728', text: '#f3f0e8', accent: '#c9a86a' } },
+  { id: 'quiet-luxury', name: '静奢白', description: '精致留白，适合高端单品', eyebrow: 'QUIET LUXURY', headline: '让日常，更有质感', palette: { background: '#f3f0ea', surface: '#fff', text: '#20211f', accent: '#826b4d' } },
+  { id: 'natural-spa', name: '自然疗愈', description: '自然色彩，营造松弛氛围', eyebrow: 'NATURAL RITUAL', headline: '在家，收藏一段自然', palette: { background: '#dfe7df', surface: '#f6f4ed', text: '#24352c', accent: '#607966' } },
+  { id: 'midnight-tech', name: '暗夜科技', description: '黑金质感，突出智能科技', eyebrow: 'FUTURE OF WATER', headline: '重新定义智能浴室', palette: { background: '#141718', surface: '#222728', text: '#f3f0e8', accent: '#c9a86a' } },
 ]
 
 const sampleAd = {
@@ -63,6 +63,11 @@ export default function App() {
   useEffect(() => () => previewUrl && URL.revokeObjectURL(previewUrl), [previewUrl])
 
   const activeStyle = useMemo(() => styles.find((item) => item.id === selectedStyle) || styles[0], [styles, selectedStyle])
+  const previewAd = useMemo(() => ({
+    ...ad,
+    eyebrow: activeStyle?.eyebrow || ad.eyebrow,
+    headline: activeStyle?.headline || ad.headline,
+  }), [ad, activeStyle])
 
   function selectImage(event) {
     const file = event.target.files?.[0]
@@ -136,7 +141,7 @@ export default function App() {
 
         <section className="preview-panel">
           <div className="preview-heading"><div><span>LIVE PREVIEW</span><h2>广告预览</h2></div><small><i /> 实时画布</small></div>
-          <div className="canvas-shell"><AdPreview ad={ad} style={activeStyle} imageUrl={previewUrl} /></div>
+          <div className="canvas-shell"><AdPreview ad={previewAd} style={activeStyle} imageUrl={previewUrl} /></div>
           <p className="preview-tip">* 预览会根据选择的风格自动调整色彩与排版</p>
         </section>
       </div>
@@ -145,4 +150,3 @@ export default function App() {
     </main>
   )
 }
-
