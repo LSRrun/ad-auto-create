@@ -1,0 +1,9 @@
+.DS_Store
+.idea/
+node_modules/
+frontend/dist/
+backend/.venv/
+backend/__pycache__/
+backend/app/__pycache__/
+backend/uploads/*
+!backend/uploads/.gitkeep
