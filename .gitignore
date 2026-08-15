@@ -7,3 +7,6 @@ backend/__pycache__/
 backend/app/__pycache__/
 backend/uploads/*
 !backend/uploads/.gitkeep
+
+# Local project phase notes
+docs/一期架构总结.md
