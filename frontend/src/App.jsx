@@ -296,9 +296,9 @@ export default function App() {
                 {reconstructionStale && <span>当前页面已修改，可重新执行 AI 重构</span>}
               </div>
             ) : <AdPreview ad={ad} style={activeStyle} imageUrl={previewUrl} />}
-            {reconstructLoading && <div className="reconstruct-overlay"><SparkIcon /><strong>AI 正在重构广告图</strong><span>生成背景并锁定合成真实商品，请稍候…</span></div>}
+            {reconstructLoading && <div className="reconstruct-overlay"><SparkIcon /><strong>AI 正在重构广告图</strong><span>正在识别商品并自由设计完整广告，请稍候…</span></div>}
           </div>
-          <p className="preview-tip">* AI 重构会保留原始排版，并使用原商品图完成锁定合成</p>
+          <p className="preview-tip">* AI 会保持商品与文案的核心信息，并自由重构画面、背景和排版</p>
         </section>
       </div>
 

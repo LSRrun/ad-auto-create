@@ -11,7 +11,6 @@ import httpx
 from fastapi import HTTPException
 from PIL import Image, ImageOps, UnidentifiedImageError
 
-from .compositor import OUTPUT_SIZE, compose_locked_ad
 from .prompts import build_reconstruction_prompt
 from .providers import (
     dashscope_generation_url,
@@ -69,7 +68,7 @@ async def test_image_connection(config: ImageModelConfig) -> dict:
     return {"success": True, "message": "连接成功；实际重构时会调用图片编辑接口并可能产生费用"}
 
 
-async def _request_openai_background(config: ImageModelConfig, product_bytes: bytes, content_type: str, prompt: str) -> bytes:
+async def _request_openai_ad(config: ImageModelConfig, product_bytes: bytes, content_type: str, prompt: str) -> bytes:
     data = {
         "model": config.model,
         "prompt": prompt,
@@ -185,7 +184,7 @@ async def _download_dashscope_image(image_url: str) -> bytes:
     return content
 
 
-async def _request_wan_background(config: ImageModelConfig, product_bytes: bytes, prompt: str) -> bytes:
+async def _request_wan_ad(config: ImageModelConfig, product_bytes: bytes, prompt: str) -> bytes:
     payload = {
         "model": config.model,
         "input": {
@@ -225,10 +224,24 @@ async def _request_wan_background(config: ImageModelConfig, product_bytes: bytes
     return await _download_dashscope_image(image_url)
 
 
-async def _request_background(config: ImageModelConfig, product_bytes: bytes, content_type: str, prompt: str) -> bytes:
+async def _request_generated_ad(config: ImageModelConfig, product_bytes: bytes, content_type: str, prompt: str) -> bytes:
     if is_dashscope_wan(config.model, config.base_url):
-        return await _request_wan_background(config, product_bytes, prompt)
-    return await _request_openai_background(config, product_bytes, content_type, prompt)
+        return await _request_wan_ad(config, product_bytes, prompt)
+    return await _request_openai_ad(config, product_bytes, content_type, prompt)
+
+
+def _normalize_generated_ad(content: bytes) -> tuple[Image.Image, int, int]:
+    """Decode the model's final poster without imposing the old fixed template."""
+    try:
+        with Image.open(BytesIO(content)) as source:
+            image = ImageOps.exif_transpose(source).convert("RGB")
+            image.load()
+    except (UnidentifiedImageError, OSError, ValueError) as exc:
+        raise HTTPException(status_code=502, detail="图片模型返回的广告图无法解析") from exc
+    width, height = image.size
+    if width < 256 or height < 256:
+        raise HTTPException(status_code=502, detail="图片模型返回的广告图尺寸过小")
+    return image, width, height
 
 
 async def reconstruct_ad(
@@ -243,24 +256,21 @@ async def reconstruct_ad(
         raise HTTPException(status_code=400, detail="请先配置图片模型 API Key")
     validate_product_image(product_bytes)
     prompt = build_reconstruction_prompt(snapshot)
-    background_bytes = await _request_background(config, product_bytes, product_content_type, prompt)
-    try:
-        composed = compose_locked_ad(background_bytes, product_bytes, snapshot)
-    except (UnidentifiedImageError, OSError, ValueError) as exc:
-        raise HTTPException(status_code=502, detail="图片模型结果无法完成商品锁定合成") from exc
+    generated_bytes = await _request_generated_ad(config, product_bytes, product_content_type, prompt)
+    generated_ad, width, height = _normalize_generated_ad(generated_bytes)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     reconstruction_id = uuid4().hex
     filename = f"{reconstruction_id}.png"
-    composed.save(output_dir / filename, format="PNG", optimize=True)
+    generated_ad.save(output_dir / filename, format="PNG", optimize=True)
     created_at = datetime.now().astimezone().isoformat()
     return {
         "id": reconstruction_id,
         "imageUrl": f"{public_base_url.rstrip('/')}/uploads/reconstructions/{filename}",
-        "mode": "product_locked",
+        "mode": "ai_redesigned",
         "provider": config.provider,
         "model": config.model,
-        "width": OUTPUT_SIZE[0],
-        "height": OUTPUT_SIZE[1],
+        "width": width,
+        "height": height,
         "createdAt": created_at,
     }

@@ -45,7 +45,7 @@ class PageSnapshot(BaseModel):
 class ReconstructionResult(BaseModel):
     id: str
     imageUrl: str
-    mode: Literal["product_locked"] = "product_locked"
+    mode: Literal["ai_redesigned"] = "ai_redesigned"
     provider: str
     model: str
     width: int
