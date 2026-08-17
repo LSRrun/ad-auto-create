@@ -21,3 +21,40 @@ export async function generateAd(formData) {
   )
 }
 
+export async function getAIProviders() {
+  return parseResponse(await fetch(`${API_BASE}/api/ai/providers`))
+}
+
+function serializeConfig(config) {
+  return {
+    provider: config.provider,
+    model: config.model,
+    base_url: config.baseUrl,
+    api_key: config.apiKey,
+  }
+}
+
+export async function testAIConnection(config) {
+  return parseResponse(
+    await fetch(`${API_BASE}/api/ai/test-connection`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ config: serializeConfig(config) }),
+    }),
+  )
+}
+
+export async function polishAdCopy({ config, styleId, product, currentCopy }) {
+  return parseResponse(
+    await fetch(`${API_BASE}/api/ai/polish`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        config: serializeConfig(config),
+        style_id: styleId,
+        product,
+        current_copy: currentCopy,
+      }),
+    }),
+  )
+}

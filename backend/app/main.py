@@ -5,6 +5,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from .ai.router import router as ai_router
 from .generator import generate_ad_copy
 from .styles import AD_STYLES, get_style
 
@@ -23,6 +24,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+app.include_router(ai_router)
 
 
 @app.get("/api/health")
@@ -62,4 +64,3 @@ async def generate_ad(
 
     ad = generate_ad_copy(product_name, brand, price, selling_points, style_id)
     return {"id": uuid4().hex, "imageUrl": image_url, **ad}
-

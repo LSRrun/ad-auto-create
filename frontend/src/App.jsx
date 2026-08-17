@@ -1,10 +1,20 @@
-import { useEffect, useMemo, useState } from 'react'
-import { generateAd, getStyles } from './api'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { generateAd, getAIProviders, getStyles, polishAdCopy, testAIConnection } from './api'
+import ModelConfigButton from './components/ModelConfigButton'
+import ModelConfigModal from './components/ModelConfigModal'
 
 const fallbackStyles = [
   { id: 'quiet-luxury', name: '静奢白', description: '精致留白，适合高端单品', eyebrow: 'QUIET LUXURY', headline: '让日常，更有质感', palette: { background: '#f3f0ea', surface: '#fff', text: '#20211f', accent: '#826b4d' } },
   { id: 'natural-spa', name: '自然疗愈', description: '自然色彩，营造松弛氛围', eyebrow: 'NATURAL RITUAL', headline: '在家，收藏一段自然', palette: { background: '#dfe7df', surface: '#f6f4ed', text: '#24352c', accent: '#607966' } },
   { id: 'midnight-tech', name: '暗夜科技', description: '黑金质感，突出智能科技', eyebrow: 'FUTURE OF WATER', headline: '重新定义智能浴室', palette: { background: '#141718', surface: '#222728', text: '#f3f0e8', accent: '#c9a86a' } },
+]
+
+const fallbackProviders = [
+  { id: 'deepseek', name: 'DeepSeek', model: 'deepseek-chat', baseUrl: 'https://api.deepseek.com', requiresApiKey: true },
+  { id: 'qwen', name: '通义千问', model: 'qwen-plus', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', requiresApiKey: true },
+  { id: 'openai', name: 'OpenAI', model: 'gpt-5-mini', baseUrl: 'https://api.openai.com/v1', requiresApiKey: true },
+  { id: 'ollama', name: 'Ollama 本地模型', model: 'qwen3:8b', baseUrl: 'http://127.0.0.1:11434/v1', requiresApiKey: false },
+  { id: 'custom', name: '自定义兼容接口', model: '', baseUrl: '', requiresApiKey: true },
 ]
 
 const sampleAd = {
@@ -48,26 +58,36 @@ function AdPreview({ ad, style, imageUrl }) {
 }
 
 export default function App() {
+  const formRef = useRef(null)
   const [styles, setStyles] = useState(fallbackStyles)
+  const [providers, setProviders] = useState(fallbackProviders)
   const [selectedStyle, setSelectedStyle] = useState('quiet-luxury')
   const [imageFile, setImageFile] = useState(null)
   const [previewUrl, setPreviewUrl] = useState('')
   const [ad, setAd] = useState(sampleAd)
   const [loading, setLoading] = useState(false)
+  const [aiLoading, setAiLoading] = useState(false)
   const [error, setError] = useState('')
+  const [modelConfig, setModelConfig] = useState(null)
+  const [modelModalOpen, setModelModalOpen] = useState(false)
 
   useEffect(() => {
     getStyles().then((data) => setStyles(data.items)).catch(() => {})
+    getAIProviders().then((data) => setProviders(data.items)).catch(() => {})
   }, [])
 
   useEffect(() => () => previewUrl && URL.revokeObjectURL(previewUrl), [previewUrl])
 
   const activeStyle = useMemo(() => styles.find((item) => item.id === selectedStyle) || styles[0], [styles, selectedStyle])
-  const previewAd = useMemo(() => ({
-    ...ad,
-    eyebrow: activeStyle?.eyebrow || ad.eyebrow,
-    headline: activeStyle?.headline || ad.headline,
-  }), [ad, activeStyle])
+
+  function selectStyle(style) {
+    setSelectedStyle(style.id)
+    setAd((current) => ({
+      ...current,
+      eyebrow: style.eyebrow || current.eyebrow,
+      headline: style.headline || current.headline,
+    }))
+  }
 
   function selectImage(event) {
     const file = event.target.files?.[0]
@@ -96,6 +116,49 @@ export default function App() {
     }
   }
 
+  async function handleAIPolish() {
+    if (!modelConfig) {
+      setModelModalOpen(true)
+      return
+    }
+    const form = formRef.current
+    if (!form?.reportValidity()) return
+    const formData = new FormData(form)
+    const product = {
+      brand: String(formData.get('brand') || ''),
+      product_name: String(formData.get('product_name') || ''),
+      price: String(formData.get('price') || ''),
+      selling_points: String(formData.get('selling_points') || ''),
+    }
+    setAiLoading(true)
+    setError('')
+    try {
+      const result = await polishAdCopy({
+        config: modelConfig,
+        styleId: selectedStyle,
+        product,
+        currentCopy: {
+          headline: ad.headline,
+          eyebrow: ad.eyebrow,
+          description: ad.description,
+          features: ad.features,
+          cta: ad.cta,
+        },
+      })
+      setAd((current) => ({
+        ...current,
+        brand: product.brand.trim() || current.brand,
+        productName: product.product_name.trim(),
+        price: product.price.trim() || current.price,
+        ...result,
+      }))
+    } catch (requestError) {
+      setError(requestError.message)
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
   return (
     <main>
       <header className="site-header">
@@ -110,8 +173,11 @@ export default function App() {
       </section>
 
       <div className="workspace">
-        <form className="control-panel" onSubmit={handleSubmit}>
-          <div className="panel-title"><span>01</span><div><h2>商品信息</h2><p>PRODUCT DETAILS</p></div></div>
+        <form className="control-panel" onSubmit={handleSubmit} ref={formRef}>
+          <div className="panel-title-row">
+            <div className="panel-title"><span>01</span><div><h2>商品信息</h2><p>PRODUCT DETAILS</p></div></div>
+            <ModelConfigButton config={modelConfig} onClick={() => setModelModalOpen(true)} />
+          </div>
           <label className="upload-box">
             <input type="file" accept="image/png,image/jpeg,image/webp" onChange={selectImage} />
             {previewUrl ? <img src={previewUrl} alt="商品预览" /> : <><UploadIcon /><strong>上传商品图</strong><span>建议使用纯色背景，JPG / PNG / WebP</span></>}
@@ -128,7 +194,7 @@ export default function App() {
           <div className="panel-title style-title"><span>02</span><div><h2>选择风格</h2><p>VISUAL DIRECTION</p></div></div>
           <div className="style-list">
             {styles.map((style) => (
-              <button type="button" className={selectedStyle === style.id ? 'selected' : ''} key={style.id} onClick={() => setSelectedStyle(style.id)}>
+              <button type="button" className={selectedStyle === style.id ? 'selected' : ''} key={style.id} onClick={() => selectStyle(style)} disabled={loading || aiLoading}>
                 <i style={{ background: `linear-gradient(135deg, ${style.palette.background} 50%, ${style.palette.accent} 50%)` }} />
                 <span><strong>{style.name}</strong><small>{style.description}</small></span>
                 <b>{selectedStyle === style.id ? '✓' : ''}</b>
@@ -136,15 +202,27 @@ export default function App() {
             ))}
           </div>
           {error && <p className="error-message">{error}</p>}
-          <button className="generate-button" type="submit" disabled={loading}><SparkIcon />{loading ? '正在生成…' : '生成广告页面'}<span>→</span></button>
+          <div className="action-row">
+            <button className="generate-button" type="submit" disabled={loading || aiLoading}><SparkIcon />{loading ? '正在生成…' : '生成广告页面'}<span>→</span></button>
+            <button className="ai-polish-button" type="button" onClick={handleAIPolish} disabled={loading || aiLoading}><SparkIcon />{aiLoading ? 'AI 润色中…' : 'AI 润色'}</button>
+          </div>
         </form>
 
         <section className="preview-panel">
           <div className="preview-heading"><div><span>LIVE PREVIEW</span><h2>广告预览</h2></div><small><i /> 实时画布</small></div>
-          <div className="canvas-shell"><AdPreview ad={previewAd} style={activeStyle} imageUrl={previewUrl} /></div>
+          <div className="canvas-shell"><AdPreview ad={ad} style={activeStyle} imageUrl={previewUrl} /></div>
           <p className="preview-tip">* 预览会根据选择的风格自动调整色彩与排版</p>
         </section>
       </div>
+
+      <ModelConfigModal
+        open={modelModalOpen}
+        config={modelConfig}
+        providers={providers}
+        onClose={() => setModelModalOpen(false)}
+        onSave={(config) => { setModelConfig(config); setModelModalOpen(false); setError('') }}
+        onTest={testAIConnection}
+      />
 
       <footer><span>MUJING CREATIVE TOOL</span><span>用设计，让好产品被看见。</span><span>2026 / V0.1</span></footer>
     </main>
