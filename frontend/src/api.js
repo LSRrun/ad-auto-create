@@ -58,3 +58,41 @@ export async function polishAdCopy({ config, styleId, product, currentCopy }) {
     }),
   )
 }
+
+export async function getImageProviders() {
+  return parseResponse(await fetch(`${API_BASE}/api/reconstruction/providers`))
+}
+
+function serializeImageConfig(config) {
+  return {
+    provider: config.provider,
+    model: config.model,
+    base_url: config.baseUrl,
+    api_key: config.apiKey,
+    size: config.size,
+    quality: config.quality,
+  }
+}
+
+export async function testImageConnection(config) {
+  return parseResponse(
+    await fetch(`${API_BASE}/api/reconstruction/test-connection`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ config: serializeImageConfig(config) }),
+    }),
+  )
+}
+
+export async function reconstructAd({ config, snapshot, productImage }) {
+  const formData = new FormData()
+  formData.set('config', JSON.stringify(serializeImageConfig(config)))
+  formData.set('snapshot', JSON.stringify(snapshot))
+  formData.set('product_image', productImage)
+  return parseResponse(
+    await fetch(`${API_BASE}/api/reconstruction/generate`, {
+      method: 'POST',
+      body: formData,
+    }),
+  )
+}

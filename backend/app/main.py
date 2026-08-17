@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .ai.router import router as ai_router
 from .generator import generate_ad_copy
+from .reconstruction.router import router as reconstruction_router
 from .styles import AD_STYLES, get_style
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -25,6 +26,7 @@ app.add_middleware(
 )
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 app.include_router(ai_router)
+app.include_router(reconstruction_router)
 
 
 @app.get("/api/health")

@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { generateAd, getAIProviders, getStyles, polishAdCopy, testAIConnection } from './api'
+import { generateAd, getAIProviders, getImageProviders, getStyles, polishAdCopy, reconstructAd, testAIConnection, testImageConnection } from './api'
+import ImageModelConfigButton from './components/ImageModelConfigButton'
+import ImageModelConfigModal from './components/ImageModelConfigModal'
 import ModelConfigButton from './components/ModelConfigButton'
 import ModelConfigModal from './components/ModelConfigModal'
+import PreviewModeSwitch from './components/PreviewModeSwitch'
 
 const fallbackStyles = [
   { id: 'quiet-luxury', name: '静奢白', description: '精致留白，适合高端单品', eyebrow: 'QUIET LUXURY', headline: '让日常，更有质感', palette: { background: '#f3f0ea', surface: '#fff', text: '#20211f', accent: '#826b4d' } },
@@ -15,6 +18,11 @@ const fallbackProviders = [
   { id: 'openai', name: 'OpenAI', model: 'gpt-5-mini', baseUrl: 'https://api.openai.com/v1', requiresApiKey: true },
   { id: 'ollama', name: 'Ollama 本地模型', model: 'qwen3:8b', baseUrl: 'http://127.0.0.1:11434/v1', requiresApiKey: false },
   { id: 'custom', name: '自定义兼容接口', model: '', baseUrl: '', requiresApiKey: true },
+]
+
+const fallbackImageProviders = [
+  { id: 'openai-image', name: 'OpenAI Images', model: 'gpt-image-2', baseUrl: 'https://api.openai.com/v1', requiresApiKey: true, capabilities: { imageInput: true, imageEdit: true } },
+  { id: 'custom-image', name: '自定义 OpenAI 图片接口', model: 'gpt-image-2', baseUrl: '', requiresApiKey: true, capabilities: { imageInput: true, imageEdit: true } },
 ]
 
 const sampleAd = {
@@ -61,19 +69,27 @@ export default function App() {
   const formRef = useRef(null)
   const [styles, setStyles] = useState(fallbackStyles)
   const [providers, setProviders] = useState(fallbackProviders)
+  const [imageProviders, setImageProviders] = useState(fallbackImageProviders)
   const [selectedStyle, setSelectedStyle] = useState('quiet-luxury')
   const [imageFile, setImageFile] = useState(null)
   const [previewUrl, setPreviewUrl] = useState('')
   const [ad, setAd] = useState(sampleAd)
   const [loading, setLoading] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
+  const [reconstructLoading, setReconstructLoading] = useState(false)
   const [error, setError] = useState('')
   const [modelConfig, setModelConfig] = useState(null)
   const [modelModalOpen, setModelModalOpen] = useState(false)
+  const [imageModelConfig, setImageModelConfig] = useState(null)
+  const [imageModelModalOpen, setImageModelModalOpen] = useState(false)
+  const [reconstructedImageUrl, setReconstructedImageUrl] = useState('')
+  const [previewMode, setPreviewMode] = useState('original')
+  const [reconstructionStale, setReconstructionStale] = useState(false)
 
   useEffect(() => {
     getStyles().then((data) => setStyles(data.items)).catch(() => {})
     getAIProviders().then((data) => setProviders(data.items)).catch(() => {})
+    getImageProviders().then((data) => setImageProviders(data.items)).catch(() => {})
   }, [])
 
   useEffect(() => () => previewUrl && URL.revokeObjectURL(previewUrl), [previewUrl])
@@ -87,6 +103,11 @@ export default function App() {
       eyebrow: style.eyebrow || current.eyebrow,
       headline: style.headline || current.headline,
     }))
+    if (reconstructedImageUrl) setReconstructionStale(true)
+  }
+
+  function markReconstructionStale() {
+    if (reconstructedImageUrl) setReconstructionStale(true)
   }
 
   function selectImage(event) {
@@ -95,6 +116,8 @@ export default function App() {
     if (previewUrl) URL.revokeObjectURL(previewUrl)
     setImageFile(file)
     setPreviewUrl(URL.createObjectURL(file))
+    setPreviewMode('original')
+    markReconstructionStale()
     setError('')
   }
 
@@ -109,6 +132,7 @@ export default function App() {
       const result = await generateAd(formData)
       setAd(result)
       if (result.imageUrl) setPreviewUrl(result.imageUrl)
+      markReconstructionStale()
     } catch (requestError) {
       setError(requestError.message)
     } finally {
@@ -152,10 +176,57 @@ export default function App() {
         price: product.price.trim() || current.price,
         ...result,
       }))
+      markReconstructionStale()
     } catch (requestError) {
       setError(requestError.message)
     } finally {
       setAiLoading(false)
+    }
+  }
+
+  async function handleAIReconstruct() {
+    if (!imageModelConfig) {
+      setImageModelModalOpen(true)
+      return
+    }
+    const form = formRef.current
+    if (!form?.reportValidity()) return
+    if (!imageFile) {
+      setError('请先上传商品图片，再进行 AI 重构')
+      return
+    }
+    const formData = new FormData(form)
+    const product = {
+      brand: String(formData.get('brand') || '').trim() || ad.brand,
+      product_name: String(formData.get('product_name') || '').trim(),
+      price: String(formData.get('price') || '').trim() || ad.price,
+      selling_points: String(formData.get('selling_points') || '').trim() || ad.features.join('，'),
+    }
+    setReconstructLoading(true)
+    setError('')
+    try {
+      const result = await reconstructAd({
+        config: imageModelConfig,
+        productImage: imageFile,
+        snapshot: {
+          style_id: selectedStyle,
+          product,
+          ad: {
+            eyebrow: ad.eyebrow,
+            headline: ad.headline,
+            description: ad.description,
+            features: ad.features,
+            cta: ad.cta,
+          },
+        },
+      })
+      setReconstructedImageUrl(result.imageUrl)
+      setReconstructionStale(false)
+      setPreviewMode('reconstructed')
+    } catch (requestError) {
+      setError(requestError.message)
+    } finally {
+      setReconstructLoading(false)
     }
   }
 
@@ -173,7 +244,7 @@ export default function App() {
       </section>
 
       <div className="workspace">
-        <form className="control-panel" onSubmit={handleSubmit} ref={formRef}>
+        <form className="control-panel" onSubmit={handleSubmit} onChange={markReconstructionStale} ref={formRef}>
           <div className="panel-title-row">
             <div className="panel-title"><span>01</span><div><h2>商品信息</h2><p>PRODUCT DETAILS</p></div></div>
             <ModelConfigButton config={modelConfig} onClick={() => setModelModalOpen(true)} />
@@ -191,10 +262,13 @@ export default function App() {
           <label><span>商品名称 <b>*</b></span><input name="product_name" required maxLength="80" placeholder="例：智能恒温花洒" /></label>
           <label><span>核心卖点</span><textarea name="selling_points" rows="3" placeholder="用逗号分隔，例：38°C 恒温，钢琴按键，大顶喷" /></label>
 
-          <div className="panel-title style-title"><span>02</span><div><h2>选择风格</h2><p>VISUAL DIRECTION</p></div></div>
+          <div className="panel-title-row style-title-row">
+            <div className="panel-title"><span>02</span><div><h2>选择风格</h2><p>VISUAL DIRECTION</p></div></div>
+            <ImageModelConfigButton config={imageModelConfig} onClick={() => setImageModelModalOpen(true)} />
+          </div>
           <div className="style-list">
             {styles.map((style) => (
-              <button type="button" className={selectedStyle === style.id ? 'selected' : ''} key={style.id} onClick={() => selectStyle(style)} disabled={loading || aiLoading}>
+              <button type="button" className={selectedStyle === style.id ? 'selected' : ''} key={style.id} onClick={() => selectStyle(style)} disabled={loading || aiLoading || reconstructLoading}>
                 <i style={{ background: `linear-gradient(135deg, ${style.palette.background} 50%, ${style.palette.accent} 50%)` }} />
                 <span><strong>{style.name}</strong><small>{style.description}</small></span>
                 <b>{selectedStyle === style.id ? '✓' : ''}</b>
@@ -203,15 +277,28 @@ export default function App() {
           </div>
           {error && <p className="error-message">{error}</p>}
           <div className="action-row">
-            <button className="generate-button" type="submit" disabled={loading || aiLoading}><SparkIcon />{loading ? '正在生成…' : '生成广告页面'}<span>→</span></button>
-            <button className="ai-polish-button" type="button" onClick={handleAIPolish} disabled={loading || aiLoading}><SparkIcon />{aiLoading ? 'AI 润色中…' : 'AI 润色'}</button>
+            <button className="generate-button" type="submit" disabled={loading || aiLoading || reconstructLoading}><SparkIcon />{loading ? '正在生成…' : '生成广告页面'}<span>→</span></button>
+            <button className="ai-reconstruct-button" type="button" onClick={handleAIReconstruct} disabled={loading || aiLoading || reconstructLoading}><SparkIcon />{reconstructLoading ? '重构中…' : 'AI 重构'}</button>
+            <button className="ai-polish-button" type="button" onClick={handleAIPolish} disabled={loading || aiLoading || reconstructLoading}><SparkIcon />{aiLoading ? 'AI 润色中…' : 'AI 润色'}</button>
           </div>
         </form>
 
         <section className="preview-panel">
-          <div className="preview-heading"><div><span>LIVE PREVIEW</span><h2>广告预览</h2></div><small><i /> 实时画布</small></div>
-          <div className="canvas-shell"><AdPreview ad={ad} style={activeStyle} imageUrl={previewUrl} /></div>
-          <p className="preview-tip">* 预览会根据选择的风格自动调整色彩与排版</p>
+          <div className="preview-heading">
+            <div><span>LIVE PREVIEW</span><h2>广告预览</h2></div>
+            <PreviewModeSwitch mode={previewMode} hasReconstruction={Boolean(reconstructedImageUrl)} stale={reconstructionStale} onChange={setPreviewMode} />
+            <small><i /> {previewMode === 'original' ? '实时画布' : 'AI 成图'}</small>
+          </div>
+          <div className="canvas-shell preview-canvas-shell">
+            {previewMode === 'reconstructed' && reconstructedImageUrl ? (
+              <div className="reconstructed-preview">
+                <img src={reconstructedImageUrl} alt="AI 重构广告图" />
+                {reconstructionStale && <span>当前页面已修改，可重新执行 AI 重构</span>}
+              </div>
+            ) : <AdPreview ad={ad} style={activeStyle} imageUrl={previewUrl} />}
+            {reconstructLoading && <div className="reconstruct-overlay"><SparkIcon /><strong>AI 正在重构广告图</strong><span>生成背景并锁定合成真实商品，请稍候…</span></div>}
+          </div>
+          <p className="preview-tip">* AI 重构会保留原始排版，并使用原商品图完成锁定合成</p>
         </section>
       </div>
 
@@ -222,6 +309,15 @@ export default function App() {
         onClose={() => setModelModalOpen(false)}
         onSave={(config) => { setModelConfig(config); setModelModalOpen(false); setError('') }}
         onTest={testAIConnection}
+      />
+
+      <ImageModelConfigModal
+        open={imageModelModalOpen}
+        config={imageModelConfig}
+        providers={imageProviders}
+        onClose={() => setImageModelModalOpen(false)}
+        onSave={(config) => { setImageModelConfig(config); setImageModelModalOpen(false); setError('') }}
+        onTest={testImageConnection}
       />
 
       <footer><span>MUJING CREATIVE TOOL</span><span>用设计，让好产品被看见。</span><span>2026 / V0.1</span></footer>
