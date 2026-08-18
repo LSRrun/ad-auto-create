@@ -38,6 +38,7 @@ async def generate_reconstruction(
     config: str = Form(...),
     snapshot: str = Form(...),
     product_image: UploadFile = File(...),
+    user_prompt: str = Form(""),
 ) -> ReconstructionResult:
     parsed_config = _parse_form_json(ImageModelConfig, config, "图片模型配置")
     parsed_snapshot = _parse_form_json(PageSnapshot, snapshot, "广告页面快照")
@@ -50,6 +51,9 @@ async def generate_reconstruction(
         raise HTTPException(status_code=400, detail="商品图片不能超过 8MB")
     if not content:
         raise HTTPException(status_code=400, detail="商品图片不能为空")
+    cleaned_user_prompt = user_prompt.strip()
+    if len(cleaned_user_prompt) > 1000:
+        raise HTTPException(status_code=400, detail="AI 重构提示词不能超过 1000 个字符")
 
     result = await reconstruct_ad(
         parsed_config,
@@ -58,5 +62,6 @@ async def generate_reconstruction(
         product_image.content_type,
         OUTPUT_DIR,
         str(request.base_url),
+        cleaned_user_prompt,
     )
     return ReconstructionResult.model_validate(result)

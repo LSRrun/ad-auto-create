@@ -84,11 +84,12 @@ export async function testImageConnection(config) {
   )
 }
 
-export async function reconstructAd({ config, snapshot, productImage }) {
+export async function reconstructAd({ config, snapshot, productImage, userPrompt = '' }) {
   const formData = new FormData()
   formData.set('config', JSON.stringify(serializeImageConfig(config)))
   formData.set('snapshot', JSON.stringify(snapshot))
   formData.set('product_image', productImage)
+  formData.set('user_prompt', userPrompt.trim())
   return parseResponse(
     await fetch(`${API_BASE}/api/reconstruction/generate`, {
       method: 'POST',

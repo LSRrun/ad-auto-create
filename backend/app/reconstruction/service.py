@@ -251,11 +251,15 @@ async def reconstruct_ad(
     product_content_type: str,
     output_dir: Path,
     public_base_url: str,
+    user_prompt: str = "",
 ) -> dict:
     if not config.api_key.strip():
         raise HTTPException(status_code=400, detail="请先配置图片模型 API Key")
+    cleaned_user_prompt = user_prompt.strip()
+    if len(cleaned_user_prompt) > 1000:
+        raise HTTPException(status_code=400, detail="AI 重构提示词不能超过 1000 个字符")
     validate_product_image(product_bytes)
-    prompt = build_reconstruction_prompt(snapshot)
+    prompt = build_reconstruction_prompt(snapshot, cleaned_user_prompt)
     generated_bytes = await _request_generated_ad(config, product_bytes, product_content_type, prompt)
     generated_ad, width, height = _normalize_generated_ad(generated_bytes)
 

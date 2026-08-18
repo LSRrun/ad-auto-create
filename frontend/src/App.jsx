@@ -36,6 +36,8 @@ const sampleAd = {
   cta: '立即了解',
 }
 
+const MAX_RECONSTRUCTION_PROMPT_LENGTH = 1000
+
 function UploadIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 15v4h14v-4" /></svg>
 }
@@ -85,6 +87,7 @@ export default function App() {
   const [reconstructedImageUrl, setReconstructedImageUrl] = useState('')
   const [previewMode, setPreviewMode] = useState('original')
   const [reconstructionStale, setReconstructionStale] = useState(false)
+  const [reconstructionPrompt, setReconstructionPrompt] = useState('')
 
   useEffect(() => {
     getStyles().then((data) => setStyles(data.items)).catch(() => {})
@@ -208,6 +211,7 @@ export default function App() {
       const result = await reconstructAd({
         config: imageModelConfig,
         productImage: imageFile,
+        userPrompt: reconstructionPrompt,
         snapshot: {
           style_id: selectedStyle,
           product,
@@ -278,9 +282,30 @@ export default function App() {
           {error && <p className="error-message">{error}</p>}
           <div className="action-row">
             <button className="generate-button" type="submit" disabled={loading || aiLoading || reconstructLoading}><SparkIcon />{loading ? '正在生成…' : '生成广告页面'}<span>→</span></button>
-            <button className="ai-reconstruct-button" type="button" onClick={handleAIReconstruct} disabled={loading || aiLoading || reconstructLoading}><SparkIcon />{reconstructLoading ? '重构中…' : 'AI 重构'}</button>
             <button className="ai-polish-button" type="button" onClick={handleAIPolish} disabled={loading || aiLoading || reconstructLoading}><SparkIcon />{aiLoading ? 'AI 润色中…' : 'AI 润色'}</button>
           </div>
+          <section className="reconstruction-prompt-section" aria-labelledby="reconstruction-prompt-title">
+            <label htmlFor="reconstruction-prompt">
+              <span className="reconstruction-prompt-heading">
+                <span><strong id="reconstruction-prompt-title">AI 重构创意要求</strong><b>可选</b></span>
+                <small>RECONSTRUCTION DIRECTION</small>
+              </span>
+              <textarea
+                id="reconstruction-prompt"
+                rows="5"
+                maxLength={MAX_RECONSTRUCTION_PROMPT_LENGTH}
+                value={reconstructionPrompt}
+                onChange={(event) => setReconstructionPrompt(event.target.value)}
+                disabled={reconstructLoading}
+                placeholder="例如：将商品放入暖色洞石浴室，清晨自然光，商品居中放大，标题置于左上方，整体像高端家居品牌广告。"
+              />
+            </label>
+            <div className="reconstruction-prompt-meta">
+              <span>留空时，AI 会根据商品与当前风格自动设计</span>
+              <b>{reconstructionPrompt.length} / {MAX_RECONSTRUCTION_PROMPT_LENGTH}</b>
+            </div>
+            <button className="ai-reconstruct-button" type="button" onClick={handleAIReconstruct} disabled={loading || aiLoading || reconstructLoading}><SparkIcon />{reconstructLoading ? 'AI 重构中…' : '开始 AI 重构'}</button>
+          </section>
         </form>
 
         <section className="preview-panel">
