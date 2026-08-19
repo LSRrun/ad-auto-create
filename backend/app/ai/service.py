@@ -74,6 +74,8 @@ def parse_polished_copy(content: str) -> PolishedCopy:
             data = json.loads(match.group(0))
         except json.JSONDecodeError as exc:
             raise HTTPException(status_code=502, detail="AI 返回的文案格式无法解析") from exc
+    if isinstance(data, dict) and isinstance(data.get("features"), str):
+        data["features"] = [item.strip() for item in re.split(r"[，,；;\n]", data["features"]) if item.strip()]
     try:
         return PolishedCopy.model_validate(data)
     except ValidationError as exc:
@@ -109,8 +111,32 @@ async def polish_copy(request: PolishRequest) -> PolishedCopy:
         "messages": messages,
         "stream": False,
         "temperature": 0.7,
-        token_field: 500,
+        token_field: 700,
         "response_format": {"type": "json_object"},
     }
     response = await _request_completion(request.config, payload)
-    return parse_polished_copy(_message_content(response))
+    content = _message_content(response)
+    try:
+        return parse_polished_copy(content)
+    except HTTPException as exc:
+        if exc.status_code != 502:
+            raise
+
+    repair_messages = [
+        *messages,
+        {"role": "assistant", "content": content},
+        {
+            "role": "user",
+            "content": (
+                "上一次返回不符合要求。请重新输出严格 JSON，必须完整包含 headline、eyebrow、"
+                "description、features、cta 五个字段，并对五个字段都进行润色；不要解释，不要使用 Markdown。"
+            ),
+        },
+    ]
+    retry_payload = {
+        **payload,
+        "messages": repair_messages,
+        "temperature": 0.3,
+    }
+    retry_response = await _request_completion(request.config, retry_payload)
+    return parse_polished_copy(_message_content(retry_response))

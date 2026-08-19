@@ -38,6 +38,14 @@ const sampleAd = {
 
 const MAX_RECONSTRUCTION_PROMPT_LENGTH = 1000
 
+function parseFeatureDraft(value) {
+  return value
+    .split(/[，,\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 3)
+}
+
 function UploadIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 15v4h14v-4" /></svg>
 }
@@ -88,6 +96,8 @@ export default function App() {
   const [previewMode, setPreviewMode] = useState('original')
   const [reconstructionStale, setReconstructionStale] = useState(false)
   const [reconstructionPrompt, setReconstructionPrompt] = useState('')
+  const [featureDraft, setFeatureDraft] = useState(sampleAd.features.join('，'))
+  const [polishFeedback, setPolishFeedback] = useState(null)
 
   useEffect(() => {
     getStyles().then((data) => setStyles(data.items)).catch(() => {})
@@ -113,6 +123,15 @@ export default function App() {
     if (reconstructedImageUrl) setReconstructionStale(true)
   }
 
+  function updateAdCopy(field, value) {
+    setAd((current) => ({ ...current, [field]: value }))
+  }
+
+  function updateFeatureDraft(value) {
+    setFeatureDraft(value)
+    setAd((current) => ({ ...current, features: parseFeatureDraft(value) }))
+  }
+
   function selectImage(event) {
     const file = event.target.files?.[0]
     if (!file) return
@@ -134,6 +153,8 @@ export default function App() {
     try {
       const result = await generateAd(formData)
       setAd(result)
+      setFeatureDraft(result.features.join('，'))
+      setPolishFeedback(null)
       if (result.imageUrl) setPreviewUrl(result.imageUrl)
       markReconstructionStale()
     } catch (requestError) {
@@ -145,11 +166,21 @@ export default function App() {
 
   async function handleAIPolish() {
     if (!modelConfig) {
+      setPolishFeedback({ type: 'info', text: '请先选择并保存 AI 文案模型配置' })
       setModelModalOpen(true)
       return
     }
     const form = formRef.current
-    if (!form?.reportValidity()) return
+    if (!form) {
+      setError('表单尚未准备好，请刷新页面后重试')
+      setPolishFeedback({ type: 'error', text: 'AI 润色未启动，请刷新页面后重试' })
+      return
+    }
+    if (!form.reportValidity()) {
+      setError('请先填写必填的商品名称，再进行 AI 润色')
+      setPolishFeedback({ type: 'error', text: 'AI 润色未启动：请先补充商品名称' })
+      return
+    }
     const formData = new FormData(form)
     const product = {
       brand: String(formData.get('brand') || ''),
@@ -159,6 +190,7 @@ export default function App() {
     }
     setAiLoading(true)
     setError('')
+    setPolishFeedback({ type: 'loading', text: '正在润色标题、英文眉题、描述、卖点和行动文案…' })
     try {
       const result = await polishAdCopy({
         config: modelConfig,
@@ -179,9 +211,12 @@ export default function App() {
         price: product.price.trim() || current.price,
         ...result,
       }))
+      setFeatureDraft(result.features.join('，'))
+      setPolishFeedback({ type: 'success', text: 'AI 润色完成：标题、英文眉题、描述、卖点和行动文案已全部更新' })
       markReconstructionStale()
     } catch (requestError) {
       setError(requestError.message)
+      setPolishFeedback({ type: 'error', text: `AI 润色失败：${requestError.message}` })
     } finally {
       setAiLoading(false)
     }
@@ -264,7 +299,41 @@ export default function App() {
             <label><span>商品价格</span><input name="price" placeholder="例：¥1,299 起" /></label>
           </div>
           <label><span>商品名称 <b>*</b></span><input name="product_name" required maxLength="80" placeholder="例：智能恒温花洒" /></label>
-          <label><span>核心卖点</span><textarea name="selling_points" rows="3" placeholder="用逗号分隔，例：38°C 恒温，钢琴按键，大顶喷" /></label>
+          <label><span>商品核心卖点</span><textarea name="selling_points" rows="3" placeholder="填写真实商品信息，用逗号分隔，例：38°C 恒温，钢琴按键，大顶喷" /></label>
+
+          <section className="copy-editor-section" aria-labelledby="copy-editor-title">
+            <div className="copy-editor-heading">
+              <span><strong id="copy-editor-title">广告文案</strong><b>AI 可润色</b></span>
+              <small>COPY EDITOR</small>
+            </div>
+            <div className="copy-editor-row">
+              <label>
+                <span>广告大标题</span>
+                <input value={ad.headline} maxLength="28" onChange={(event) => updateAdCopy('headline', event.target.value)} />
+              </label>
+              <label>
+                <span>行动文案</span>
+                <input value={ad.cta} maxLength="16" onChange={(event) => updateAdCopy('cta', event.target.value)} />
+              </label>
+            </div>
+            <label>
+              <span>英文眉题</span>
+              <input value={ad.eyebrow} maxLength="40" onChange={(event) => updateAdCopy('eyebrow', event.target.value)} />
+            </label>
+            <label>
+              <span>广告描述</span>
+              <textarea rows="3" value={ad.description} maxLength="140" onChange={(event) => updateAdCopy('description', event.target.value)} />
+            </label>
+            <label>
+              <span>广告卖点文案</span>
+              <textarea rows="3" value={featureDraft} maxLength="200" onChange={(event) => updateFeatureDraft(event.target.value)} placeholder="最多 3 条，用逗号或换行分隔" />
+            </label>
+          </section>
+
+          <div className="copy-polish-action">
+            <button className="ai-polish-button" type="button" onClick={handleAIPolish} disabled={loading || aiLoading || reconstructLoading}><SparkIcon />{aiLoading ? 'AI 润色中…' : 'AI 润色'}</button>
+          </div>
+          {polishFeedback && <p className={`polish-feedback ${polishFeedback.type}`} role="status" aria-live="polite">{polishFeedback.text}</p>}
 
           <div className="panel-title-row style-title-row">
             <div className="panel-title"><span>02</span><div><h2>选择风格</h2><p>VISUAL DIRECTION</p></div></div>
@@ -282,7 +351,6 @@ export default function App() {
           {error && <p className="error-message">{error}</p>}
           <div className="action-row">
             <button className="generate-button" type="submit" disabled={loading || aiLoading || reconstructLoading}><SparkIcon />{loading ? '正在生成…' : '生成广告页面'}<span>→</span></button>
-            <button className="ai-polish-button" type="button" onClick={handleAIPolish} disabled={loading || aiLoading || reconstructLoading}><SparkIcon />{aiLoading ? 'AI 润色中…' : 'AI 润色'}</button>
           </div>
           <section className="reconstruction-prompt-section" aria-labelledby="reconstruction-prompt-title">
             <label htmlFor="reconstruction-prompt">
