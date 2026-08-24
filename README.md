@@ -34,6 +34,15 @@
 
 > AI 重构结果由图片模型直接生成。商品细节保持程度和中文文字准确性取决于所选模型，当前版本不能做到像素级保证。
 
+### 可复用风格模板
+
+- 在风格列表中通过“添加风格模板”导入新风格。
+- 支持单个 HTML 文件；系统会清理脚本、事件属性和远程资源，并识别商品图、标题、品牌、价格和卖点容器。
+- 支持上传广告参考图，通过具备图片理解能力的 OpenAI 兼容模型生成受控布局草稿。
+- 两种导入都需先预览确认，发布后才会进入风格列表。
+- 已发布模板使用沙箱 iframe 渲染，可实时替换商品图、品牌、标题、描述、价格、卖点和行动文案。
+- 风格包保存在 `backend/data/style_templates/`，刷新页面或重启单机后端后仍可使用。
+
 ## 技术栈
 
 - 前端：React、Vite
@@ -52,7 +61,9 @@
 │   │   ├── generator.py          # 非 AI 规则文案生成
 │   │   ├── styles.py             # 广告风格定义
 │   │   ├── ai/                   # AI 文案模型、提示词、校验与接口
-│   │   └── reconstruction/       # 图片模型适配、重构提示词与成图处理
+│   │   ├── reconstruction/       # 图片模型适配、重构提示词与成图处理
+│   │   └── style_templates/      # HTML/参考图导入、安全清理、布局编译与持久化
+│   ├── data/                     # 风格草稿与已发布模板（Git 忽略）
 │   ├── uploads/                  # 本地上传图片和 AI 重构结果
 │   └── requirements.txt
 ├── frontend/
@@ -193,6 +204,11 @@ VITE_API_BASE_URL=https://your-api.example.com npm run dev
 | --- | --- | --- |
 | GET | `/api/health` | 后端健康检查 |
 | GET | `/api/styles` | 获取广告风格 |
+| POST | `/api/style-templates/drafts/html` | 上传 HTML 并创建安全模板草稿 |
+| POST | `/api/style-templates/drafts/reference` | 使用视觉模型从参考图生成草稿 |
+| PATCH | `/api/style-templates/drafts/{draft_id}` | 更新草稿字段映射和风格设定 |
+| POST | `/api/style-templates/drafts/{draft_id}/publish` | 发布可复用风格 |
+| GET | `/api/style-templates/{style_id}/render-source` | 读取已清理的模板渲染源 |
 | POST | `/api/ads/generate` | 使用规则生成广告数据并上传商品图 |
 | GET | `/api/ai/providers` | 获取文案模型服务商 |
 | POST | `/api/ai/test-connection` | 测试文案模型连接 |
@@ -214,12 +230,21 @@ VITE_API_BASE_URL=https://your-api.example.com npm run dev
 
 上传的商品图片和生成结果会保存在 `backend/uploads/`。该目录内容已经被 Git 忽略，但当前版本不会自动定期清理，本机或服务器维护者需要自行管理存储和隐私。
 
+上传 HTML 不会在主页直接执行。后端会删除脚本、交互标签、事件属性、外链和高风险 CSS，前端再通过 CSP 与不授予脚本权限的沙箱 iframe 渲染。风格源文件和已发布资产保存在 `backend/data/`，使用者需要确保对上传的 HTML、图片、字体和品牌资产拥有使用权。
+
 ## 构建与检查
 
 后端导入检查：
 
 ```bash
 conda run -n adcreate python -m compileall -q backend/app
+```
+
+风格模板回归测试：
+
+```bash
+cd backend
+conda run -n adcreate python -m unittest discover -s tests -v
 ```
 
 前端生产构建：

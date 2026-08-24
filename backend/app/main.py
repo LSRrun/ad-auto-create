@@ -8,7 +8,8 @@ from fastapi.staticfiles import StaticFiles
 from .ai.router import router as ai_router
 from .generator import generate_ad_copy
 from .reconstruction.router import router as reconstruction_router
-from .styles import AD_STYLES, get_style
+from .style_templates.router import router as style_templates_router
+from .styles import get_style, list_styles as get_all_styles
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 UPLOAD_DIR = BASE_DIR / "uploads"
@@ -27,6 +28,7 @@ app.add_middleware(
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 app.include_router(ai_router)
 app.include_router(reconstruction_router)
+app.include_router(style_templates_router)
 
 
 @app.get("/api/health")
@@ -36,7 +38,7 @@ def health() -> dict:
 
 @app.get("/api/styles")
 def list_styles() -> dict:
-    return {"items": AD_STYLES}
+    return {"items": get_all_styles()}
 
 
 @app.post("/api/ads/generate")

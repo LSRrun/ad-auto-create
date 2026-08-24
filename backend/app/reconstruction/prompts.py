@@ -2,19 +2,18 @@ from ..styles import get_style
 from .schemas import PageSnapshot
 
 
-STYLE_DIRECTIONS = {
-    "quiet-luxury": "克制的高端静奢风，大面积温暖留白，细腻材质，柔和自然光，精致而安静",
-    "natural-spa": "自然疗愈风，柔和绿色、石材和木质氛围，松弛、干净、具有居家水疗感",
-    "midnight-tech": "暗夜科技风，黑金对比，克制的光带和现代几何结构，专业、智能、未来感",
-}
-
-
 def build_reconstruction_prompt(snapshot: PageSnapshot, user_prompt: str = "") -> str:
     style = get_style(snapshot.style_id) or {}
     product = snapshot.product
     ad = snapshot.ad
     features = "、".join(ad.features) or product.selling_points or "未提供"
-    direction = STYLE_DIRECTIONS.get(snapshot.style_id, "高端、简洁、适合卫浴品牌的商业摄影风格")
+    direction = style.get("visual_direction", "高端、简洁、适合卫浴品牌的商业摄影风格")
+    palette = style.get("palette", {})
+    template_context = (
+        f"参考画布比例：{style.get('aspect_ratio', '4:5')}\n"
+        f"参考配色：背景 {palette.get('background', '未提供')}，"
+        f"文字 {palette.get('text', '未提供')}，强调 {palette.get('accent', '未提供')}"
+    )
     creative_direction = user_prompt.strip()
     user_direction_section = ""
     if creative_direction:
@@ -33,6 +32,7 @@ def build_reconstruction_prompt(snapshot: PageSnapshot, user_prompt: str = "") -
 
 风格名称：{style.get('name', snapshot.style_id)}
 空间与视觉气质：{direction}
+{template_context}
 商品名称：{product.product_name}
 品牌：{product.brand or '未提供'}
 价格：{product.price or '未提供'}

@@ -10,7 +10,18 @@ function createDraft(config, provider) {
   }
 }
 
-export default function ModelConfigModal({ open, config, providers, onClose, onSave, onTest }) {
+export default function ModelConfigModal({
+  open,
+  config,
+  providers,
+  onClose,
+  onSave,
+  onTest,
+  title = 'AI 模型配置',
+  eyebrow = 'AI MODEL CONNECTION',
+  intro = '选择 OpenAI 兼容的模型服务。API Key 只保存在当前页面内存中，刷新后自动清除。',
+  backdropClassName = '',
+}) {
   const [draft, setDraft] = useState(() => createDraft(config, providers[0]))
   const [testing, setTesting] = useState(false)
   const [message, setMessage] = useState(null)
@@ -93,14 +104,14 @@ export default function ModelConfigModal({ open, config, providers, onClose, onS
   }
 
   return (
-    <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && !testing && onClose()}>
+    <div className={`modal-backdrop ${backdropClassName}`} onMouseDown={(event) => event.target === event.currentTarget && !testing && onClose()}>
       <section className="model-modal" role="dialog" aria-modal="true" aria-labelledby="model-modal-title">
         <div className="modal-heading">
-          <div><span>AI MODEL CONNECTION</span><h2 id="model-modal-title">AI 模型配置</h2></div>
+          <div><span>{eyebrow}</span><h2 id="model-modal-title">{title}</h2></div>
           <button type="button" aria-label="关闭" onClick={onClose} disabled={testing}>×</button>
         </div>
 
-        <p className="modal-intro">选择 OpenAI 兼容的模型服务。API Key 只保存在当前页面内存中，刷新后自动清除。</p>
+        <p className="modal-intro">{intro}</p>
 
         <label className="modal-field">
           <span>服务商</span>
@@ -133,4 +144,3 @@ export default function ModelConfigModal({ open, config, providers, onClose, onS
     </div>
   )
 }
-

@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { generateAd, getAIProviders, getImageProviders, getStyles, polishAdCopy, reconstructAd, testAIConnection, testImageConnection } from './api'
+import { generateAd, getAIProviders, getImageProviders, getStyleRenderSource, getStyles, polishAdCopy, reconstructAd, testAIConnection, testImageConnection } from './api'
 import ImageModelConfigButton from './components/ImageModelConfigButton'
 import ImageModelConfigModal from './components/ImageModelConfigModal'
 import ModelConfigButton from './components/ModelConfigButton'
 import ModelConfigModal from './components/ModelConfigModal'
 import PreviewModeSwitch from './components/PreviewModeSwitch'
+import StyleTemplateWizard from './components/StyleTemplateWizard'
+import TemplatePreviewFrame from './components/TemplatePreviewFrame'
 
 const fallbackStyles = [
-  { id: 'quiet-luxury', name: '静奢白', description: '精致留白，适合高端单品', eyebrow: 'QUIET LUXURY', headline: '让日常，更有质感', palette: { background: '#f3f0ea', surface: '#fff', text: '#20211f', accent: '#826b4d' } },
-  { id: 'natural-spa', name: '自然疗愈', description: '自然色彩，营造松弛氛围', eyebrow: 'NATURAL RITUAL', headline: '在家，收藏一段自然', palette: { background: '#dfe7df', surface: '#f6f4ed', text: '#24352c', accent: '#607966' } },
-  { id: 'midnight-tech', name: '暗夜科技', description: '黑金质感，突出智能科技', eyebrow: 'FUTURE OF WATER', headline: '重新定义智能浴室', palette: { background: '#141718', surface: '#222728', text: '#f3f0e8', accent: '#c9a86a' } },
+  { id: 'quiet-luxury', name: '静奢白', description: '精致留白，适合高端单品', eyebrow: 'QUIET LUXURY', headline: '让日常，更有质感', render_mode: 'react_builtin', aspect_ratio: '4:5', is_builtin: true, palette: { background: '#f3f0ea', surface: '#fff', text: '#20211f', accent: '#826b4d' } },
+  { id: 'natural-spa', name: '自然疗愈', description: '自然色彩，营造松弛氛围', eyebrow: 'NATURAL RITUAL', headline: '在家，收藏一段自然', render_mode: 'react_builtin', aspect_ratio: '4:5', is_builtin: true, palette: { background: '#dfe7df', surface: '#f6f4ed', text: '#24352c', accent: '#607966' } },
+  { id: 'midnight-tech', name: '暗夜科技', description: '黑金质感，突出智能科技', eyebrow: 'FUTURE OF WATER', headline: '重新定义智能浴室', render_mode: 'react_builtin', aspect_ratio: '4:5', is_builtin: true, palette: { background: '#141718', surface: '#222728', text: '#f3f0e8', accent: '#c9a86a' } },
 ]
 
 const fallbackProviders = [
@@ -98,6 +100,11 @@ export default function App() {
   const [reconstructionPrompt, setReconstructionPrompt] = useState('')
   const [featureDraft, setFeatureDraft] = useState(sampleAd.features.join('，'))
   const [polishFeedback, setPolishFeedback] = useState(null)
+  const [styleWizardOpen, setStyleWizardOpen] = useState(false)
+  const [visionModelConfig, setVisionModelConfig] = useState(null)
+  const [visionModelModalOpen, setVisionModelModalOpen] = useState(false)
+  const [templateSource, setTemplateSource] = useState(null)
+  const [templateLoading, setTemplateLoading] = useState(false)
 
   useEffect(() => {
     getStyles().then((data) => setStyles(data.items)).catch(() => {})
@@ -109,6 +116,21 @@ export default function App() {
 
   const activeStyle = useMemo(() => styles.find((item) => item.id === selectedStyle) || styles[0], [styles, selectedStyle])
 
+  useEffect(() => {
+    let cancelled = false
+    if (!activeStyle || activeStyle.render_mode !== 'sandbox_html') {
+      setTemplateSource(null)
+      setTemplateLoading(false)
+      return undefined
+    }
+    setTemplateLoading(true)
+    getStyleRenderSource(activeStyle.id)
+      .then((source) => { if (!cancelled) setTemplateSource(source) })
+      .catch((requestError) => { if (!cancelled) setError(`风格模板读取失败：${requestError.message}`) })
+      .finally(() => { if (!cancelled) setTemplateLoading(false) })
+    return () => { cancelled = true }
+  }, [activeStyle])
+
   function selectStyle(style) {
     setSelectedStyle(style.id)
     setAd((current) => ({
@@ -117,6 +139,12 @@ export default function App() {
       headline: style.headline || current.headline,
     }))
     if (reconstructedImageUrl) setReconstructionStale(true)
+  }
+
+  function handleStylePublished(style) {
+    setStyles((current) => [...current.filter((item) => item.id !== style.id), style])
+    selectStyle(style)
+    setError('')
   }
 
   function markReconstructionStale() {
@@ -343,10 +371,13 @@ export default function App() {
             {styles.map((style) => (
               <button type="button" className={selectedStyle === style.id ? 'selected' : ''} key={style.id} onClick={() => selectStyle(style)} disabled={loading || aiLoading || reconstructLoading}>
                 <i style={{ background: `linear-gradient(135deg, ${style.palette.background} 50%, ${style.palette.accent} 50%)` }} />
-                <span><strong>{style.name}</strong><small>{style.description}</small></span>
+                <span><strong>{style.name}{!style.is_builtin && <em>{style.source_type === 'reference_image' ? 'AI 参考图' : 'HTML'}</em>}</strong><small>{style.description}</small></span>
                 <b>{selectedStyle === style.id ? '✓' : ''}</b>
               </button>
             ))}
+            <button type="button" className="add-style-template-button" onClick={() => setStyleWizardOpen(true)} disabled={loading || aiLoading || reconstructLoading}>
+              <i>+</i><span><strong>添加风格模板</strong><small>导入 HTML，或从参考图生成可复用风格</small></span><b>↗</b>
+            </button>
           </div>
           {error && <p className="error-message">{error}</p>}
           <div className="action-row">
@@ -388,6 +419,10 @@ export default function App() {
                 <img src={reconstructedImageUrl} alt="AI 重构广告图" />
                 {reconstructionStale && <span>当前页面已修改，可重新执行 AI 重构</span>}
               </div>
+            ) : activeStyle?.render_mode === 'sandbox_html' ? (
+              templateLoading
+                ? <div className="template-preview-loading">正在读取风格模板…</div>
+                : <TemplatePreviewFrame templateHtml={templateSource?.templateHtml} ad={ad} imageUrl={previewUrl} aspectRatio={activeStyle.aspect_ratio || templateSource?.aspectRatio || '4:5'} />
             ) : <AdPreview ad={ad} style={activeStyle} imageUrl={previewUrl} />}
             {reconstructLoading && <div className="reconstruct-overlay"><SparkIcon /><strong>AI 正在重构广告图</strong><span>正在识别商品并自由设计完整广告，请稍候…</span></div>}
           </div>
@@ -411,6 +446,29 @@ export default function App() {
         onClose={() => setImageModelModalOpen(false)}
         onSave={(config) => { setImageModelConfig(config); setImageModelModalOpen(false); setError('') }}
         onTest={testImageConnection}
+      />
+
+      <StyleTemplateWizard
+        open={styleWizardOpen}
+        onClose={() => setStyleWizardOpen(false)}
+        onPublished={handleStylePublished}
+        visionConfig={visionModelConfig}
+        onConfigureVision={() => setVisionModelModalOpen(true)}
+        previewAd={ad}
+        previewImageUrl={previewUrl}
+      />
+
+      <ModelConfigModal
+        open={visionModelModalOpen}
+        config={visionModelConfig}
+        providers={providers}
+        onClose={() => setVisionModelModalOpen(false)}
+        onSave={(config) => { setVisionModelConfig(config); setVisionModelModalOpen(false) }}
+        onTest={testAIConnection}
+        title="风格分析模型"
+        eyebrow="VISION ANALYSIS MODEL"
+        intro="请选择支持图片输入和 JSON 输出的 OpenAI 兼容视觉模型。API Key 只保存在当前页面内存中。"
+        backdropClassName="nested-model-backdrop"
       />
 
       <footer><span>MUJING CREATIVE TOOL</span><span>用设计，让好产品被看见。</span><span>2026 / V0.1</span></footer>

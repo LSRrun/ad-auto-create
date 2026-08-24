@@ -7,6 +7,8 @@ __pycache__/
 *.py[cod]
 backend/uploads/*
 !backend/uploads/.gitkeep
+backend/data/style_template_drafts/
+backend/data/style_templates/
 
 # Local project phase notes
 docs/一期架构总结.md

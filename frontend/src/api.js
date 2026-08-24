@@ -12,6 +12,38 @@ export async function getStyles() {
   return parseResponse(await fetch(`${API_BASE}/api/styles`))
 }
 
+export async function createHtmlStyleDraft(file) {
+  const formData = new FormData()
+  formData.set('file', file)
+  return parseResponse(await fetch(`${API_BASE}/api/style-templates/drafts/html`, { method: 'POST', body: formData }))
+}
+
+export async function createReferenceStyleDraft({ file, config, userDirection = '' }) {
+  const formData = new FormData()
+  formData.set('file', file)
+  formData.set('analysis_config', JSON.stringify(serializeConfig(config)))
+  formData.set('user_direction', userDirection.trim())
+  return parseResponse(await fetch(`${API_BASE}/api/style-templates/drafts/reference`, { method: 'POST', body: formData }))
+}
+
+export async function updateStyleDraft(draftId, changes) {
+  return parseResponse(
+    await fetch(`${API_BASE}/api/style-templates/drafts/${draftId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(changes),
+    }),
+  )
+}
+
+export async function publishStyleDraft(draftId) {
+  return parseResponse(await fetch(`${API_BASE}/api/style-templates/drafts/${draftId}/publish`, { method: 'POST' }))
+}
+
+export async function getStyleRenderSource(styleId) {
+  return parseResponse(await fetch(`${API_BASE}/api/style-templates/${styleId}/render-source`))
+}
+
 export async function generateAd(formData) {
   return parseResponse(
     await fetch(`${API_BASE}/api/ads/generate`, {

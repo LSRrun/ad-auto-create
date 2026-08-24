@@ -1,19 +1,6 @@
 import json
 
-STYLE_PROMPTS = {
-    "quiet-luxury": {
-        "tone": "克制、高级、简洁，用精准的细节表达质感，避免大声叫卖",
-        "headline_limit": 12,
-    },
-    "natural-spa": {
-        "tone": "自然、舒缓、温暖，具有生活方式和疗愈感",
-        "headline_limit": 14,
-    },
-    "midnight-tech": {
-        "tone": "现代、科技、专业，突出智能体验，但不虚构产品功能",
-        "headline_limit": 14,
-    },
-}
+from ..styles import get_style
 
 SYSTEM_PROMPT = """你是一名专注卫浴产品的资深中文广告文案编辑。
 你的任务是完整润色用户提供的一组广告文案，而不是只修改大标题，也不是创造新的产品事实。
@@ -34,12 +21,14 @@ SYSTEM_PROMPT = """你是一名专注卫浴产品的资深中文广告文案编�
 
 
 def build_messages(style_id: str, product: dict, current_copy: dict) -> list[dict]:
-    style_prompt = STYLE_PROMPTS[style_id]
+    style = get_style(style_id) or {}
     task = {
         "style": {
             "id": style_id,
-            "tone": style_prompt["tone"],
-            "headlineLimit": style_prompt["headline_limit"],
+            "name": style.get("name", style_id),
+            "tone": style.get("copy_tone", "高端、简洁、适合卫浴品牌的商业文案"),
+            "headlineLimit": style.get("headline_limit", 14),
+            "templateFields": list((style.get("bindings") or {}).keys()),
         },
         "product": product,
         "currentCopy": current_copy,
