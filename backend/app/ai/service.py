@@ -10,6 +10,8 @@ from .providers import chat_completions_url
 from .schemas import ModelConfig, PolishedCopy, PolishRequest
 
 REQUEST_TIMEOUT = httpx.Timeout(35.0, connect=10.0)
+CONNECTION_MAX_TOKENS = 256
+POLISH_MAX_TOKENS = 4096
 
 
 def _headers(config: ModelConfig) -> dict[str, str]:
@@ -90,7 +92,7 @@ async def test_connection(config: ModelConfig) -> dict:
         "model": config.model,
         "messages": [{"role": "user", "content": "只回复 OK"}],
         "stream": False,
-        token_field: 8,
+        token_field: CONNECTION_MAX_TOKENS,
     }
     response = await _request_completion(config, payload)
     _message_content(response)
@@ -111,7 +113,7 @@ async def polish_copy(request: PolishRequest) -> PolishedCopy:
         "messages": messages,
         "stream": False,
         "temperature": 0.7,
-        token_field: 700,
+        token_field: POLISH_MAX_TOKENS,
         "response_format": {"type": "json_object"},
     }
     response = await _request_completion(request.config, payload)

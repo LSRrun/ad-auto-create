@@ -8,6 +8,9 @@ from ..ai.service import _message_content, _request_completion
 from .schemas import CreateMediaPlanRequest, ResearchEvidence
 
 
+MEDIA_STRATEGY_MAX_TOKENS = 4096
+
+
 class AIStrategySuggestion(BaseModel):
     product_category: str = Field(max_length=80)
     creative_positioning: str = Field(max_length=200)
@@ -32,6 +35,12 @@ def _parse(content: str) -> AIStrategySuggestion:
             raise ValueError("AI 未返回可用 JSON")
         data = json.loads(match.group(0))
     return AIStrategySuggestion.model_validate(data)
+
+
+def _supports_image_input(provider: str, model: str) -> bool:
+    provider_id = provider.strip().lower()
+    model_id = model.strip().lower()
+    return provider_id != "deepseek" and not model_id.startswith("deepseek")
 
 
 async def suggest(
@@ -61,7 +70,7 @@ async def suggest(
         + json.dumps(facts, ensure_ascii=False)
     )
     user_content: str | list[dict] = prompt
-    if image and mime_type:
+    if image and mime_type and _supports_image_input(config.provider, config.model):
         encoded = base64.b64encode(image).decode("ascii")
         user_content = [
             {"type": "text", "text": prompt},
@@ -76,7 +85,7 @@ async def suggest(
         ],
         "stream": False,
         "temperature": 0.25,
-        token_field: 1400,
+        token_field: MEDIA_STRATEGY_MAX_TOKENS,
         "response_format": {"type": "json_object"},
     }
     response = await _request_completion(config, payload)
