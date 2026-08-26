@@ -7,6 +7,7 @@ import ModelConfigModal from './components/ModelConfigModal'
 import PreviewModeSwitch from './components/PreviewModeSwitch'
 import StyleTemplateWizard from './components/StyleTemplateWizard'
 import TemplatePreviewFrame from './components/TemplatePreviewFrame'
+import MediaPlanPage from './components/media-planning/MediaPlanPage'
 
 const fallbackStyles = [
   { id: 'quiet-luxury', name: '静奢白', description: '精致留白，适合高端单品', eyebrow: 'QUIET LUXURY', headline: '让日常，更有质感', render_mode: 'react_builtin', aspect_ratio: '4:5', is_builtin: true, palette: { background: '#f3f0ea', surface: '#fff', text: '#20211f', accent: '#826b4d' } },
@@ -105,6 +106,9 @@ export default function App() {
   const [visionModelModalOpen, setVisionModelModalOpen] = useState(false)
   const [templateSource, setTemplateSource] = useState(null)
   const [templateLoading, setTemplateLoading] = useState(false)
+  const [hasGeneratedAd, setHasGeneratedAd] = useState(false)
+  const [appPath, setAppPath] = useState(() => window.location.pathname)
+  const [mediaPlanSnapshot, setMediaPlanSnapshot] = useState(null)
 
   useEffect(() => {
     getStyles().then((data) => setStyles(data.items)).catch(() => {})
@@ -113,6 +117,14 @@ export default function App() {
   }, [])
 
   useEffect(() => () => previewUrl && URL.revokeObjectURL(previewUrl), [previewUrl])
+
+  useEffect(() => {
+    function handlePopState() {
+      setAppPath(window.location.pathname)
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
 
   const activeStyle = useMemo(() => styles.find((item) => item.id === selectedStyle) || styles[0], [styles, selectedStyle])
 
@@ -184,6 +196,7 @@ export default function App() {
       setFeatureDraft(result.features.join('，'))
       setPolishFeedback(null)
       if (result.imageUrl) setPreviewUrl(result.imageUrl)
+      setHasGeneratedAd(true)
       markReconstructionStale()
     } catch (requestError) {
       setError(requestError.message)
@@ -295,6 +308,69 @@ export default function App() {
     } finally {
       setReconstructLoading(false)
     }
+  }
+
+  function navigate(path, replace = false) {
+    window.history[replace ? 'replaceState' : 'pushState']({}, '', path)
+    setAppPath(path)
+    window.scrollTo({ top: 0, behavior: 'instant' })
+  }
+
+  function openMediaPlanner() {
+    if (!hasGeneratedAd && !reconstructedImageUrl) {
+      setError('请先生成广告页面，再创建投放方案')
+      return
+    }
+    const form = formRef.current
+    if (!form?.reportValidity()) return
+    const values = new FormData(form)
+    const currentCreativeUrl = previewMode === 'reconstructed' && reconstructedImageUrl ? reconstructedImageUrl : previewUrl
+    setMediaPlanSnapshot({
+      product: {
+        brand: String(values.get('brand') || '').trim() || ad.brand,
+        name: String(values.get('product_name') || '').trim() || ad.productName,
+        price_text: String(values.get('price') || '').trim() || ad.price,
+        selling_points: ad.features,
+        headline: ad.headline,
+        description: ad.description,
+      },
+      creativeSource: {
+        type: previewMode === 'reconstructed' && reconstructedImageUrl ? 'reconstructed' : 'original',
+        source_url: currentCreativeUrl || '',
+        style_id: selectedStyle,
+        version: reconstructedImageUrl && previewMode === 'reconstructed' ? 'ai-reconstruction-current' : 'live-preview-current',
+      },
+      creativeUrl: currentCreativeUrl,
+    })
+    navigate('/media-plans/new')
+  }
+
+  const mediaPlanMatch = appPath.match(/^\/media-plans\/(plan-[a-f0-9]{12})$/)
+  if (appPath === '/media-plans/new' || mediaPlanMatch) {
+    return (
+      <>
+        <MediaPlanPage
+          initialPlanId={mediaPlanMatch?.[1] || null}
+          snapshot={mediaPlanSnapshot}
+          creativeFile={imageFile}
+          modelConfig={modelConfig}
+          onConfigureAI={() => setModelModalOpen(true)}
+          onBack={() => navigate('/')}
+          onPlanCreated={(planId) => navigate(`/media-plans/${planId}`, true)}
+        />
+        <ModelConfigModal
+          open={modelModalOpen}
+          config={modelConfig}
+          providers={providers}
+          onClose={() => setModelModalOpen(false)}
+          onSave={(config) => { setModelConfig(config); setModelModalOpen(false); setError('') }}
+          onTest={testAIConnection}
+          title="投放策略模型"
+          eyebrow="MEDIA PLANNING MODEL"
+          intro="用于分析广告创意和综合联网研究结果。未配置时仍可使用规则模式生成方案。"
+        />
+      </>
+    )
   }
 
   return (
@@ -410,7 +486,10 @@ export default function App() {
         <section className="preview-panel">
           <div className="preview-heading">
             <div><span>LIVE PREVIEW</span><h2>广告预览</h2></div>
-            <PreviewModeSwitch mode={previewMode} hasReconstruction={Boolean(reconstructedImageUrl)} stale={reconstructionStale} onChange={setPreviewMode} />
+            <div className="preview-heading-tools">
+              <PreviewModeSwitch mode={previewMode} hasReconstruction={Boolean(reconstructedImageUrl)} stale={reconstructionStale} onChange={setPreviewMode} />
+              <button className="media-plan-entry-button" type="button" onClick={openMediaPlanner} disabled={!hasGeneratedAd && !reconstructedImageUrl}><SparkIcon /><span>{hasGeneratedAd || reconstructedImageUrl ? '基于当前广告生成投放方案' : '生成广告后规划投放'}</span><b>→</b></button>
+            </div>
             <small><i /> {previewMode === 'original' ? '实时画布' : 'AI 成图'}</small>
           </div>
           <div className="canvas-shell preview-canvas-shell">

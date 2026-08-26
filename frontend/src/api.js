@@ -66,6 +66,10 @@ function serializeConfig(config) {
   }
 }
 
+export function serializeAIConfig(config) {
+  return config ? serializeConfig(config) : null
+}
+
 export async function testAIConnection(config) {
   return parseResponse(
     await fetch(`${API_BASE}/api/ai/test-connection`, {
@@ -128,4 +132,50 @@ export async function reconstructAd({ config, snapshot, productImage, userPrompt
       body: formData,
     }),
   )
+}
+
+export async function createMediaPlanJob({ payload, creativeFile, creativeUrl }) {
+  const formData = new FormData()
+  formData.set('payload', JSON.stringify(payload))
+  if (creativeFile) {
+    formData.set('creative_image', creativeFile)
+  } else if (creativeUrl) {
+    try {
+      const response = await fetch(creativeUrl)
+      if (response.ok) {
+        const blob = await response.blob()
+        const extension = blob.type === 'image/png' ? 'png' : blob.type === 'image/webp' ? 'webp' : 'jpg'
+        formData.set('creative_image', new File([blob], `current-ad.${extension}`, { type: blob.type || 'image/jpeg' }))
+      }
+    } catch {
+      // The structured ad snapshot is still sufficient for the rule fallback.
+    }
+  }
+  return parseResponse(await fetch(`${API_BASE}/api/media-plans/jobs`, { method: 'POST', body: formData }))
+}
+
+export async function getMediaPlanJob(jobId) {
+  return parseResponse(await fetch(`${API_BASE}/api/media-plans/jobs/${jobId}`))
+}
+
+export async function getMediaPlan(planId) {
+  return parseResponse(await fetch(`${API_BASE}/api/media-plans/${planId}`))
+}
+
+export async function updateMediaPlan(plan) {
+  return parseResponse(
+    await fetch(`${API_BASE}/api/media-plans/${plan.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(plan),
+    }),
+  )
+}
+
+export async function recalculateMediaPlan(planId) {
+  return parseResponse(await fetch(`${API_BASE}/api/media-plans/${planId}/recalculate`, { method: 'POST' }))
+}
+
+export function getMediaPlanExportUrl(planId, format = 'markdown') {
+  return `${API_BASE}/api/media-plans/${planId}/export?format=${encodeURIComponent(format)}`
 }

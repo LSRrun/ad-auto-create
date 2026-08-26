@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ..ai.schemas import ModelConfig
 
@@ -54,11 +54,13 @@ class ResearchConfig(BaseModel):
 
 
 class CreateMediaPlanRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     product: ProductSnapshot
     creative_source: CreativeSource
     business: BusinessInput
     research: ResearchConfig = Field(default_factory=ResearchConfig)
-    model_config: ModelConfig | None = None
+    ai_config: ModelConfig | None = Field(default=None, alias="model_config")
 
 
 class ResearchEvidence(BaseModel):
@@ -189,4 +191,3 @@ class JobStatus(BaseModel):
     official_source_count: int = 0
     created_at: str
     updated_at: str
-

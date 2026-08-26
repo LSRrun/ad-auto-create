@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .ai.router import router as ai_router
 from .generator import generate_ad_copy
+from .media_planning.router import router as media_planning_router
 from .reconstruction.router import router as reconstruction_router
 from .style_templates.router import router as style_templates_router
 from .styles import get_style, list_styles as get_all_styles
@@ -29,6 +30,7 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 app.include_router(ai_router)
 app.include_router(reconstruction_router)
 app.include_router(style_templates_router)
+app.include_router(media_planning_router)
 
 
 @app.get("/api/health")
