@@ -2,6 +2,9 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
 
 async function parseResponse(response) {
   if (!response.ok) {
+    if (response.status === 413) {
+      throw new Error('上传图片过大，请使用不超过 8 MB 的 JPG、PNG 或 WebP 图片')
+    }
     const body = await response.json().catch(() => ({}))
     throw new Error(body.detail || '请求失败，请稍后重试')
   }
