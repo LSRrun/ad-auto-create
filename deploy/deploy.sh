@@ -40,6 +40,10 @@ if ! command -v nginx &> /dev/null; then
     yum install -y nginx
 fi
 
+# 修复目录权限，确保 Nginx 能读取文件
+chmod o+x /root /root/projects /root/projects/ad-auto-create
+chmod -R o+rX /root/projects/ad-auto-create/frontend/dist
+
 # 测试 Nginx 配置
 nginx -t
 
@@ -57,9 +61,9 @@ echo "[6/6] 启动 Nginx..."
 systemctl enable nginx
 systemctl restart nginx
 
-# 开放 80 端口（firewalld）
+# 开放 8080 端口（firewalld）
 if systemctl is-active --quiet firewalld; then
-    firewall-cmd --permanent --add-port=80/tcp
+    firewall-cmd --permanent --add-port=8080/tcp
     firewall-cmd --reload
 fi
 
@@ -68,7 +72,7 @@ echo "========================================="
 echo "  部署完成！"
 echo "========================================="
 echo ""
-echo "  访问地址: http://101.200.187.130"
+echo "  访问地址: http://101.200.187.130:8080"
 echo ""
 echo "  常用命令:"
 echo "    查看后端状态:  systemctl status ad-api"
