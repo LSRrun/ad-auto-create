@@ -455,10 +455,6 @@ export default function App() {
               <i>+</i><span><strong>添加风格模板</strong><small>导入 HTML，或从参考图生成可复用风格</small></span><b>↗</b>
             </button>
           </div>
-          {error && <p className="error-message">{error}</p>}
-          <div className="action-row">
-            <button className="generate-button" type="submit" disabled={loading || aiLoading || reconstructLoading}><SparkIcon />{loading ? '正在生成…' : '生成广告页面'}<span>→</span></button>
-          </div>
           <section className="reconstruction-prompt-section" aria-labelledby="reconstruction-prompt-title">
             <label htmlFor="reconstruction-prompt">
               <span className="reconstruction-prompt-heading">
@@ -481,6 +477,10 @@ export default function App() {
             </div>
             <button className="ai-reconstruct-button" type="button" onClick={handleAIReconstruct} disabled={loading || aiLoading || reconstructLoading}><SparkIcon />{reconstructLoading ? 'AI 重构中…' : '开始 AI 重构'}</button>
           </section>
+          {error && <p className="error-message">{error}</p>}
+          <div className="action-row">
+            <button className="generate-button" type="submit" disabled={loading || aiLoading || reconstructLoading}><SparkIcon />{loading ? '正在生成…' : '生成广告页面'}<span>→</span></button>
+          </div>
         </form>
 
         <section className="preview-panel">
