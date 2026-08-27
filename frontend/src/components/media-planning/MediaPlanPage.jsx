@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   createMediaPlanJob,
   getMediaPlan,
@@ -112,7 +112,7 @@ function SetupStep({ snapshot, modelConfig, onConfigureAI, onStart, busy, error 
   )
 }
 
-function ProgressStep({ job, onBack }) {
+function ProgressStep({ job, onBack, error }) {
   const stages = [
     ['creative_analysis', '读取商品资料与广告创意', 12],
     ['research', '检索行业、城市与平台资料', 52],
@@ -134,7 +134,7 @@ function ProgressStep({ job, onBack }) {
         })}
       </div>
       <div className="media-plan-source-progress"><span>已找到资料 {job?.source_count || 0} 条</span><span>官方来源 {job?.official_source_count || 0} 条</span></div>
-      {job?.status === 'failed' && <><p className="media-plan-error">! {job.error}</p><button className="media-plan-secondary-action" type="button" onClick={onBack}>返回重新配置</button></>}
+      {(job?.status === 'failed' || error) && <><p className="media-plan-error">! {job?.error || error}</p><button className="media-plan-secondary-action" type="button" onClick={onBack}>返回重新配置</button></>}
     </section>
   )
 }
@@ -235,6 +235,11 @@ export default function MediaPlanPage({ initialPlanId, snapshot, creativeFile, m
   const [phase, setPhase] = useState(initialPlanId ? 'loading' : 'setup')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const onPlanCreatedRef = useRef(onPlanCreated)
+
+  useEffect(() => {
+    onPlanCreatedRef.current = onPlanCreated
+  }, [onPlanCreated])
 
   useEffect(() => {
     if (!initialPlanId) return
@@ -243,26 +248,44 @@ export default function MediaPlanPage({ initialPlanId, snapshot, creativeFile, m
   }, [initialPlanId])
 
   useEffect(() => {
-    if (!job || !['queued', 'running'].includes(job.status)) return undefined
+    const jobId = job?.id
+    if (!jobId || !['queued', 'running'].includes(job.status)) return undefined
     let cancelled = false
-    const timer = window.setTimeout(async () => {
+    let timer
+
+    async function poll() {
       try {
-        const next = await getMediaPlanJob(job.id)
+        const next = await getMediaPlanJob(jobId)
         if (cancelled) return
-        setJob(next)
-        if (next.status === 'completed' && next.plan_id) {
+
+        if (next.status === 'completed') {
+          if (!next.plan_id) throw new Error('任务已完成，但未返回投放方案 ID')
           const result = await getMediaPlan(next.plan_id)
           if (cancelled) return
+          setJob(next)
           setPlan(result)
           setPhase('workspace')
-          onPlanCreated(next.plan_id)
+          setError('')
+          onPlanCreatedRef.current(next.plan_id)
+          return
+        }
+
+        setJob(next)
+        setError('')
+        if (['queued', 'running'].includes(next.status)) {
+          timer = window.setTimeout(poll, 650)
         }
       } catch (requestError) {
-        if (!cancelled) setError(requestError.message)
+        if (!cancelled) {
+          setError(requestError.message)
+          timer = window.setTimeout(poll, 1300)
+        }
       }
-    }, 650)
+    }
+
+    timer = window.setTimeout(poll, 650)
     return () => { cancelled = true; window.clearTimeout(timer) }
-  }, [job, onPlanCreated])
+  }, [job?.id])
 
   async function start(business) {
     if (!snapshot?.product?.name) {
@@ -316,10 +339,9 @@ export default function MediaPlanPage({ initialPlanId, snapshot, creativeFile, m
         <div className="media-plan-header-actions">{exportLinks && <><a href={exportLinks.markdown}>导出简报</a><a href={exportLinks.json}>导出 JSON</a></>}</div>
       </header>
       {phase === 'setup' && <SetupStep snapshot={snapshot} modelConfig={modelConfig} onConfigureAI={onConfigureAI} onStart={start} busy={busy} error={error} />}
-      {phase === 'progress' && <ProgressStep job={job} onBack={() => setPhase('setup')} />}
+      {phase === 'progress' && <ProgressStep job={job} error={error} onBack={() => setPhase('setup')} />}
       {phase === 'loading' && <ProgressStep job={{ message: '正在读取已保存方案', progress: 40, stage: 'research' }} onBack={onBack} />}
       {phase === 'workspace' && plan && <Workspace plan={plan} setPlan={setPlan} onSave={saveAndRecalculate} saving={busy} error={error} />}
     </div>
   )
 }
-
