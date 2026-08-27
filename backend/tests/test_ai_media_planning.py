@@ -30,6 +30,23 @@ class TextModelBudgetTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(captured["max_tokens"], CONNECTION_MAX_TOKENS)
         self.assertEqual(CONNECTION_MAX_TOKENS, 256)
+        self.assertIs(captured["enable_thinking"], False)
+
+    async def test_connection_does_not_send_deepseek_option_to_other_models(self):
+        captured = {}
+
+        async def fake_request(config, payload):
+            captured.update(payload)
+            return {"choices": [{"message": {"content": "OK"}}]}
+
+        config = ModelConfig.model_validate({
+            **model_config("qwen-plus"),
+            "provider": "qwen",
+        })
+        with patch("app.ai.service._request_completion", side_effect=fake_request):
+            await test_connection(config)
+
+        self.assertNotIn("enable_thinking", captured)
 
     async def test_polish_uses_expanded_output_budget(self):
         captured = {}

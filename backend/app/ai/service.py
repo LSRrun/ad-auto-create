@@ -64,6 +64,12 @@ def _message_content(response: dict) -> str:
     return content.strip()
 
 
+def _is_deepseek_model(config: ModelConfig) -> bool:
+    provider = config.provider.strip().lower()
+    model = config.model.strip().lower()
+    return provider == "deepseek" or model.startswith("deepseek-")
+
+
 def parse_polished_copy(content: str) -> PolishedCopy:
     cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", content.strip(), flags=re.IGNORECASE)
     try:
@@ -94,6 +100,11 @@ async def test_connection(config: ModelConfig) -> dict:
         "stream": False,
         token_field: CONNECTION_MAX_TOKENS,
     }
+    if _is_deepseek_model(config):
+        # DeepSeek V4 enables reasoning by default. A tiny connection probe can
+        # otherwise spend its whole output budget on reasoning_content and
+        # return an empty final content even though authentication succeeded.
+        payload["enable_thinking"] = False
     response = await _request_completion(config, payload)
     _message_content(response)
     return {"success": True, "message": "连接成功"}
